@@ -28,29 +28,19 @@ def get_all_users():
     return [row[0] for row in cursor.fetchall()]
 
 # ================== FORCE SUBSCRIPTION ==================
-async def is_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    if not Config.FORCE_SUB_CHANNEL:
-        return True
-    try:
-        member = await context.bot.get_chat_member(Config.FORCE_SUB_CHANNEL, user_id)
-        return member.status not in ["left", "kicked"]
-    except Exception as e:
-        logger.error(f"Subscription check error: {e}")
-        return False
-
 async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not await is_subscribed(user_id, context):
-        buttons = [[InlineKeyboardButton("Join Channel", url=f"t.me/{Config.FORCE_SUB_CHANNEL}")]]
-        await update.message.reply_text(
-            "⚠️ Please join our channel to use this bot!",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return False
-    return True
+    if not Config.FORCE_SUB_LINK:
+        return True  # Feature disabled
+
+    buttons = [[InlineKeyboardButton("Join Channel", url=Config.FORCE_SUB_LINK)]]
+    await update.message.reply_text(
+        "⚠️ Join our channel to use this bot!",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return False
 
 # ================== AUTO-DELETE FUNCTION ==================
-async def auto_delete(message, delay: int = 300):
+async def auto_delete(message, delay: int = 300):  # 5 minutes
     await sleep(delay)
     try:
         await message.delete()
@@ -74,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_subscription(update, context):
+    if Config.FORCE_SUB_LINK and not await check_subscription(update, context):
         return
 
     user_input = update.message.text
@@ -91,17 +81,22 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from_chat_id=Config.CHANNEL_ID,
             message_id=message_id
         )
-        # Auto-delete after 5 minutes (300 seconds)
-        asyncio.create_task(auto_delete(sent_msg))
-        
+        # Auto-delete after 5 minutes
+        try:
+            await auto_delete(sent_msg)
+        except Exception as e:
+            logger.error(f"Auto-delete error: {e}")
+
+    except ValueError:
+        await update.message.reply_text("⚠️ Please enter a valid number.")
     except Exception as e:
         logger.error(f"Error: {e}")
-        await update.message.reply_text("⚠️ Invalid number! No file exists for this number.")
+        await update.message.reply_text("⚠️ File not found for this number.")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in Config.ADMINS:
-        await update.message.reply_text("❌ Admin only command!")
+        await update.message.reply_text("❌ Admin-only command!")
         return
 
     replied_msg = update.message.reply_to_message
