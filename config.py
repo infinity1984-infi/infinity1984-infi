@@ -5,3 +5,4 @@ class Config:
     CHANNEL_ID = -1002610839118  # Replace with your channel ID (include -100)
     BASE_MESSAGE_ID = 4   # Starting message ID (e.g., 1 → 4, 2 → 5)
     ADMINS = [6285668838]  # Your Telegram user ID (get from @userinfobot)
+    FORCE_SUB_CHANNEL = -1001234567890  # Your channel ID (optional: set to None to disable)
