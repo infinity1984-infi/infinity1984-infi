@@ -26,13 +26,19 @@ def get_all_users():
     cursor.execute("SELECT user_id FROM users")
     return [row[0] for row in cursor.fetchall()]
 
-# ================== FIXED AUTO-DELETE ==================
-async def auto_delete(message: Message, delay: int):
-    """Delete a Telegram Message object after delay"""
+# ================== AUTO-DELETE WITH OPTIONAL NOTIFICATION ==================
+async def auto_delete(message: Message, delay: int, context: ContextTypes.DEFAULT_TYPE = None, notify: bool = False):
+    """Delete a Telegram Message object after delay, optionally notify user"""
     try:
         await asyncio.sleep(delay)
         await message.delete()
         logger.info(f"Deleted message {message.message_id}")
+
+        if notify and context:
+            await context.bot.send_message(
+                chat_id=message.chat_id,
+                text="🗑️ Your video has been automatically deleted to save space."
+            )
     except Exception as e:
         logger.error(f"Delete failed: {e}")
 
@@ -65,16 +71,16 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         message_id = Config.BASE_MESSAGE_ID + (number - 1)
         
-        # Use forward_message to get full Message object for deletion
+        # Forward file to user
         forwarded_msg = await context.bot.forward_message(
             chat_id=user_msg.chat_id,
             from_chat_id=Config.CHANNEL_ID,
             message_id=message_id
         )
         
-        # Schedule deletions
-        asyncio.create_task(auto_delete(forwarded_msg, 60))  # Delete forwarded file after 60s
-        asyncio.create_task(auto_delete(user_msg, 10))       # Delete user's input
+        # Schedule deletion and notify user
+        asyncio.create_task(auto_delete(forwarded_msg, 60, context, notify=True))
+        asyncio.create_task(auto_delete(user_msg, 10))
         
     except ValueError:
         reply = await update.message.reply_text("⚠️ Enter valid number")
