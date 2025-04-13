@@ -3,7 +3,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from config import Config
 import logging
 import sqlite3
-from asyncio import sleep, create_task
+import asyncio
 
 # Enable logging
 logging.basicConfig(
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 conn = sqlite3.connect('users.db')
 cursor = conn.cursor()
 
-# Create users table for broadcast functionality
+# Create users table for broadcast
 cursor.execute('''CREATE TABLE IF NOT EXISTS users 
                 (user_id INTEGER PRIMARY KEY)''')
 conn.commit()
@@ -29,66 +29,80 @@ def get_all_users():
     cursor.execute("SELECT user_id FROM users")
     return [row[0] for row in cursor.fetchall()]
 
+# ================== AUTO-DELETE FUNCTION ==================
+async def auto_delete(message, delay: int = 60):
+    """Delete message after specified delay"""
+    try:
+        await asyncio.sleep(delay)
+        await message.delete()
+        logger.info(f"Deleted message {message.message_id}")
+    except Exception as e:
+        logger.error(f"Auto-delete failed: {e}")
+
 # ================== COMMAND HANDLERS ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id)
     await update.message.reply_text(
         f"Hi {user.mention_html()}! 👋\n"
-        "Send a number to get the corresponding file from the channel!",
+        "Send a number to get the corresponding file!",
         parse_mode="HTML"
     )
+    # Delete start message after 30 seconds
+    asyncio.create_task(auto_delete(update.message, 30))
 
 async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         number = int(update.message.text)
         if number < 1:
-            await update.message.reply_text("❌ Please enter a positive number.")
+            reply = await update.message.reply_text("❌ Enter positive number")
+            asyncio.create_task(auto_delete(reply, 10))
             return
         
         message_id = Config.BASE_MESSAGE_ID + (number - 1)
         
+        # Send file and schedule deletion
         sent_msg = await context.bot.copy_message(
             chat_id=update.effective_chat.id,
             from_chat_id=Config.CHANNEL_ID,
             message_id=message_id
         )
-        # Auto-delete after 5 minutes
-        create_task(auto_delete(sent_msg))
+        asyncio.create_task(auto_delete(sent_msg, 60))  # Delete file after 60s
+        
+        # Delete user's number message after 10s
+        asyncio.create_task(auto_delete(update.message, 10))
         
     except ValueError:
-        await update.message.reply_text("⚠️ Please enter a valid number.")
+        reply = await update.message.reply_text("⚠️ Enter valid number")
+        asyncio.create_task(auto_delete(reply, 10))
     except Exception as e:
         logger.error(f"Error: {e}")
-        await update.message.reply_text("⚠️ File not found for this number!")
+        reply = await update.message.reply_text("⚠️ File not found")
+        asyncio.create_task(auto_delete(reply, 10))
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in Config.ADMINS:
-        await update.message.reply_text("❌ Admin only command!")
+    user = update.effective_user
+    if user.id not in Config.ADMINS:
+        reply = await update.message.reply_text("❌ Admin only!")
+        asyncio.create_task(auto_delete(reply, 10))
         return
 
-    replied_msg = update.message.reply_to_message
-    if not replied_msg:
-        await update.message.reply_text("⚠️ Reply to a message to broadcast!")
+    if not update.message.reply_to_message:
+        reply = await update.message.reply_text("⚠️ Reply to a message")
+        asyncio.create_task(auto_delete(reply, 10))
         return
 
     users = get_all_users()
     success = 0
-    for user in users:
+    for user_id in users:
         try:
-            await replied_msg.copy(user)
+            await update.message.reply_to_message.copy(user_id)
             success += 1
         except Exception as e:
-            logger.error(f"Broadcast error for {user}: {e}")
-    await update.message.reply_text(f"Broadcast complete! Sent to {success}/{len(users)} users.")
-
-async def auto_delete(message, delay: int = 300):
-    await sleep(delay)
-    try:
-        await message.delete()
-    except Exception as e:
-        logger.error(f"Auto-delete failed: {e}")
+            logger.error(f"Broadcast fail {user_id}: {e}")
+    
+    report = await update.message.reply_text(f"Broadcasted to {success}/{len(users)}")
+    asyncio.create_task(auto_delete(report, 30))
 
 # ================== MAIN FUNCTION ==================
 def main():
@@ -99,7 +113,7 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(MessageHandler(filters.Regex(r'^\d+$'), handle_number))
     
-    # Start the bot
+    # Start bot
     application.run_polling()
 
 if __name__ == "__main__":
