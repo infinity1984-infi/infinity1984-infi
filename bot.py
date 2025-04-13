@@ -65,16 +65,16 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         message_id = Config.BASE_MESSAGE_ID + (number - 1)
         
-        # Send file and get Message object
-        bot_msg = await context.bot.copy_message(
+        # Use forward_message to get full Message object for deletion
+        forwarded_msg = await context.bot.forward_message(
             chat_id=user_msg.chat_id,
             from_chat_id=Config.CHANNEL_ID,
             message_id=message_id
         )
         
         # Schedule deletions
-        asyncio.create_task(auto_delete(bot_msg, 60))  # Delete file after 60s
-        asyncio.create_task(auto_delete(user_msg, 10))  # Delete user's input
+        asyncio.create_task(auto_delete(forwarded_msg, 60))  # Delete forwarded file after 60s
+        asyncio.create_task(auto_delete(user_msg, 10))       # Delete user's input
         
     except ValueError:
         reply = await update.message.reply_text("⚠️ Enter valid number")
