@@ -28,7 +28,6 @@ def get_all_users():
 
 # ================== AUTO-DELETE WITH OPTIONAL NOTIFICATION ==================
 async def auto_delete(message: Message, delay: int, context: ContextTypes.DEFAULT_TYPE = None, notify: bool = False):
-    """Delete a Telegram Message object after delay, optionally notify user"""
     try:
         await asyncio.sleep(delay)
         await message.delete()
@@ -37,7 +36,7 @@ async def auto_delete(message: Message, delay: int, context: ContextTypes.DEFAUL
         if notify and context:
             await context.bot.send_message(
                 chat_id=message.chat_id,
-                text="🗑️ Your video has been automatically deleted to save space."
+                text="🗑️ Eng: Your video has been automatically deleted to save space.\nUzbek: Xotirani tejash uchun videongiz avtomatik tarzda o'chirildi."
             )
     except Exception as e:
         logger.error(f"Delete failed: {e}")
@@ -46,15 +45,12 @@ async def auto_delete(message: Message, delay: int, context: ContextTypes.DEFAUL
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id)
-    
+
     start_msg = await update.message.reply_text(
-        f"Hi {user.mention_html()}! 👋\n"
-        "Send a number to get the corresponding file!\n"
-        "This message will self-destruct in 30 seconds.",
+        f"👋 Eng: Hi {user.mention_html()}! Send a number to get the corresponding file.\n"
+        "Uzbek: Salom! Faylni olish uchun raqam yuboring.",
         parse_mode="HTML"
     )
-    
-    # Delete start message and user's /start command
     asyncio.create_task(auto_delete(start_msg, 30))
     asyncio.create_task(auto_delete(update.message, 10))
 
@@ -62,45 +58,53 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_msg = update.message
         number = int(user_msg.text)
-        
+
         if number < 1:
-            reply = await user_msg.reply_text("❌ Enter positive number")
+            reply = await user_msg.reply_text(
+                "❌ Eng: Please enter a positive number.\nUzbek: Iltimos, musbat raqam kiriting."
+            )
             asyncio.create_task(auto_delete(reply, 10))
             asyncio.create_task(auto_delete(user_msg, 10))
             return
-        
+
         message_id = Config.BASE_MESSAGE_ID + (number - 1)
-        
-        # Forward file to user
+
         forwarded_msg = await context.bot.forward_message(
             chat_id=user_msg.chat_id,
             from_chat_id=Config.CHANNEL_ID,
             message_id=message_id
         )
-        
-        # Schedule deletion and notify user
+
         asyncio.create_task(auto_delete(forwarded_msg, 60, context, notify=True))
         asyncio.create_task(auto_delete(user_msg, 10))
-        
+
     except ValueError:
-        reply = await update.message.reply_text("⚠️ Enter valid number")
+        reply = await update.message.reply_text(
+            "⚠️ Eng: Please enter a valid number.\nUzbek: Iltimos, to'g'ri raqam kiriting."
+        )
         asyncio.create_task(auto_delete(reply, 10))
         asyncio.create_task(auto_delete(update.message, 10))
     except Exception as e:
         logger.error(f"Error: {e}")
-        reply = await update.message.reply_text("⚠️ File not found")
+        reply = await update.message.reply_text(
+            "⚠️ Eng: File not found or invalid number.\nUzbek: Fayl topilmadi yoki noto‘g‘ri raqam."
+        )
         asyncio.create_task(auto_delete(reply, 10))
         asyncio.create_task(auto_delete(update.message, 10))
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in Config.ADMINS:
-        reply = await update.message.reply_text("❌ Admin only!")
+        reply = await update.message.reply_text(
+            "❌ Eng: Admins only can use this command.\nUzbek: Bu buyruq faqat adminlar uchun."
+        )
         asyncio.create_task(auto_delete(reply, 10))
         return
 
     if not update.message.reply_to_message:
-        reply = await update.message.reply_text("⚠️ Reply to a message")
+        reply = await update.message.reply_text(
+            "⚠️ Eng: Please reply to a message to broadcast.\nUzbek: Translyatsiya qilish uchun xabarga javob bering."
+        )
         asyncio.create_task(auto_delete(reply, 10))
         return
 
@@ -112,19 +116,21 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success += 1
         except Exception as e:
             logger.error(f"Broadcast fail {user_id}: {e}")
-    
-    report = await update.message.reply_text(f"✅ Sent to {success}/{len(users)} users")
+
+    report = await update.message.reply_text(
+        f"✅ Eng: Broadcast sent to {success}/{len(users)} users.\nUzbek: Translyatsiya {success}/{len(users)} foydalanuvchiga yuborildi."
+    )
     asyncio.create_task(auto_delete(report, 30))
     asyncio.create_task(auto_delete(update.message, 10))
 
 # ================== MAIN FUNCTION ==================
 def main():
     application = Application.builder().token(Config.BOT_TOKEN).build()
-    
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(MessageHandler(filters.Regex(r'^\d+$'), handle_number))
-    
+
     application.run_polling()
 
 if __name__ == "__main__":
